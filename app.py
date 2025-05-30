@@ -1740,8 +1740,14 @@ if st.session_state.current_page == "🏠 Home":
 # For simplicity, a standard streamlit button is used above.
 
 elif st.session_state.current_page == "👥 Staff Management": # Staff Management Tab
-    st.markdown("<h2 style='text-align: center; width: 100%; font-size: 2rem; color: var(--text-primary); font-weight: 700; margin-bottom: 0.5rem;'>👥 Smart Staff Management</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; max-width: 700px; margin-left: auto; margin-right: auto; font-size: 1rem; color: var(--text-secondary); font-style: italic; margin-bottom: 1.5rem;'>Easily add, edit, and organize staff profiles. Filter and search with advanced criteria to find the right personnel quickly.</p>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='text-align: center; margin-top: 2.5rem; margin-bottom: 2rem;'>
+        <span style='font-size: 2.2rem; font-weight: 800; display: block; margin-bottom: 0.3rem; padding-left: 1.5rem;'>👥 Smart Staff Management</span>
+        <div style='color: #4B5563; font-size: 1.08rem; font-style: italic; display: block; max-width: 600px; margin: 0 auto;'>
+            Easily add, edit, and organize staff profiles. Filter and search with advanced criteria to find the right personnel quickly.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # === Move Staff Directory to Top ===
     st.header("Staff Directory")
@@ -2730,10 +2736,12 @@ elif st.session_state.current_page == "📅 Roster Generation": # Roster Generat
 
 elif st.session_state.current_page == "📋 Leave Management":
     st.markdown("""
-    <h1 style='text-align: center; margin-bottom: 0.5rem; padding-left: 2.5rem;'>📋 Leave Management</h1>
-    <p style='text-align: center; color: #4B5563; font-size: 1.05rem; font-style: italic; margin-bottom: 2rem;'>
-        Manage leave requests, track staff absences, and keep your roster up to date.
-    </p>
+    <div style='text-align: center; margin-top: 2.5rem; margin-bottom: 2rem;'>
+        <span style='font-size: 2.2rem; font-weight: 800; display: block; margin-bottom: 0.3rem; padding-left: 1.5rem;'>📋 Leave Management</span>
+        <div style='color: #4B5563; font-size: 1.08rem; font-style: italic; display: block; max-width: 600px; margin: 0 auto;'>
+            Manage leave requests, track staff absences, and keep your roster up to date.
+        </div>
+    </div>
     """, unsafe_allow_html=True)
     # Initialize leave_requests in session state if not present
     if 'leave_requests' not in st.session_state:
