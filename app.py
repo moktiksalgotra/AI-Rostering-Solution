@@ -3288,7 +3288,7 @@ elif st.session_state.current_page == "💬 AI Assistant": # AI Assistant Tab
             placeholder="Type your message...",
             label_visibility="collapsed",
             key="ai_user_input_enhanced_key",
-            height=44
+            height=68 # Changed from 44 to 68 to meet minimum requirement
         )
         # Button row
         st.markdown("<div class='ai-chat-input-row'>", unsafe_allow_html=True)
