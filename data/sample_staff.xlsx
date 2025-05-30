@@ -1,0 +1,11 @@
+name,role,skills,max_shifts_per_week,preferred_shift
+John Smith,Nurse,General,5,Morning
+Emma Wilson,Nurse,General,5,Morning
+Michael Brown,Nurse,General,5,Morning
+Sarah Davis,Nurse,General,5,Morning
+David Miller,Nurse,General,5,Morning
+Lisa Johnson,Senior Nurse,ICU,5,Evening
+James Anderson,Senior Nurse,ICU,5,Evening
+Rachel Taylor,Senior Nurse,ICU,5,Evening
+William White,Head Nurse,"ICU,Emergency",5,Night
+Jennifer Lee,Head Nurse,"ICU,Emergency",5,Night 
