@@ -2730,7 +2730,7 @@ elif st.session_state.current_page == "📅 Roster Generation": # Roster Generat
 
 elif st.session_state.current_page == "📋 Leave Management":
     st.markdown("""
-    <h1 style='text-align: center; margin-bottom: 0.5rem;'>📋 Leave Management</h1>
+    <h1 style='text-align: center; margin-bottom: 0.5rem; padding-left: 2.5rem;'>📋 Leave Management</h1>
     <p style='text-align: center; color: #4B5563; font-size: 1.05rem; font-style: italic; margin-bottom: 2rem;'>
         Manage leave requests, track staff absences, and keep your roster up to date.
     </p>
