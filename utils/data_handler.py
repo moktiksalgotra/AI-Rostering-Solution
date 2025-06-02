@@ -7,7 +7,11 @@ from utils.database import DatabaseHandler
 
 class DataHandler:
     def __init__(self):
+        print("Initializing DataHandler...")
         self.db = DatabaseHandler()
+        print("DatabaseHandler created, initializing database...")
+        self.db.initialize_database()  # Explicitly call initialize_database
+        print("Database initialized, getting staff data...")
         self.staff_data = self.db.get_all_staff()
         
         # Verify staff data has required columns and proper structure
@@ -24,6 +28,7 @@ class DataHandler:
                 raise ValueError(f"Failed to initialize staff data with required columns: {required_columns}")
         
         self.shift_patterns = None
+        print("DataHandler initialization completed.")
         
     def load_staff_data(self, file=None):
         """Load staff data from Excel file and store in database."""

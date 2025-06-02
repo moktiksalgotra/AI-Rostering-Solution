@@ -15,10 +15,12 @@ class DatabaseHandler:
     def initialize_database(self):
         """Initialize database with required tables."""
         try:
+            print("Starting database initialization...")
             conn = self.get_connection()
             cursor = conn.cursor()
 
             # Create staff table
+            print("Creating staff table...")
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS staff (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +32,8 @@ class DatabaseHandler:
                 )
             ''')
 
-            # Create leave_requests table
+            # Create leave_requests table if it doesn't exist
+            print("Creating leave_requests table if not exists...")
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS leave_requests (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,9 +48,17 @@ class DatabaseHandler:
                 )
             ''')
 
+            # Verify tables exist
+            print("Verifying tables...")
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = cursor.fetchall()
+            print(f"Found tables: {[table[0] for table in tables]}")
+
             conn.commit()
+            print("Database initialization completed successfully.")
         except Exception as e:
             print(f"Error initializing database: {str(e)}")
+            raise  # Re-raise the exception to see the full traceback
         finally:
             conn.close()
 
@@ -142,6 +153,13 @@ class DatabaseHandler:
     def add_leave_request(self, staff_member, leave_type, start_date, end_date, duration, reason):
         """Add a new leave request."""
         try:
+            print(f"Adding leave request for {staff_member}")
+            print(f"Leave type: {leave_type}")
+            print(f"Start date: {start_date}")
+            print(f"End date: {end_date}")
+            print(f"Duration: {duration}")
+            print(f"Reason: {reason}")
+            
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute('''
@@ -150,6 +168,7 @@ class DatabaseHandler:
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (staff_member, leave_type, start_date, end_date, duration, reason))
             conn.commit()
+            print("Leave request added successfully")
             return True
         except Exception as e:
             print(f"Error adding leave request: {str(e)}")
@@ -178,6 +197,7 @@ class DatabaseHandler:
     def get_all_leave_requests(self):
         """Get all leave requests as a list of dictionaries."""
         try:
+            print("Fetching all leave requests...")
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute('''
@@ -190,6 +210,7 @@ class DatabaseHandler:
             for row in cursor.fetchall():
                 leave_request = dict(zip(columns, row))
                 leave_requests.append(leave_request)
+            print(f"Found {len(leave_requests)} leave requests")
             return leave_requests
         except Exception as e:
             print(f"Error getting leave requests: {str(e)}")
@@ -258,7 +279,8 @@ class DatabaseHandler:
                     ('Robert Taylor', 'Senior Doctor', 'Surgery,ICU'),
                     ('Jennifer Lee', 'Nurse', 'General,Emergency'),
                     ('William White', 'Doctor', 'ICU,Surgery'),
-                    ('Maria Garcia', 'Senior Nurse', 'Emergency,General')
+                    ('Maria Garcia', 'Senior Nurse', 'Emergency,General'),
+                    ('Moktik', 'Doctor', 'Emergency,General')
                 ]
                 
                 cursor.executemany('''
