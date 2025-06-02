@@ -168,19 +168,29 @@ button[data-testid="baseButton-back_button"]:hover {
 """, unsafe_allow_html=True)
 
 # Define the path to your logo image
-logo_path = r"E:\\QuantAI\\AI-Rostering-Solution\\Logo Dark.png"
+logo_path = os.path.join("assets", "Logo Dark.png")
 
 # Horizontal Header Navigation (using columns for better control)
 header_cols = st.columns([0.3, 1, 0.3]) # Adjust column widths as needed
 
 with header_cols[0]:
     # Logo and Title
-    st.markdown("""
-    <div style='display: flex; align-items: center; padding: 0rem 0rem; margin-bottom: 0rem;'>
-        <img src='data:image/png;base64,{}' style='height: 100px; margin-right: -10px;'/>
-        <span style='font-size: 1.9rem; font-weight: 700; color: #FFFFFF;'>QuantAI</span>
-    </div>
-    """.format(base64.b64encode(open(logo_path, 'rb').read()).decode()), unsafe_allow_html=True)
+    try:
+        with open(logo_path, 'rb') as f:
+            logo_base64 = base64.b64encode(f.read()).decode()
+        st.markdown("""
+        <div style='display: flex; align-items: center; padding: 0rem 0rem; margin-bottom: 0rem;'>
+            <img src='data:image/png;base64,{}' style='height: 100px; margin-right: -10px;'/>
+            <span style='font-size: 1.9rem; font-weight: 700; color: #FFFFFF;'>QuantAI</span>
+        </div>
+        """.format(logo_base64), unsafe_allow_html=True)
+    except FileNotFoundError:
+        # Fallback to text-only header if logo is not found
+        st.markdown("""
+        <div style='display: flex; align-items: center; padding: 0rem 0rem; margin-bottom: 0rem;'>
+            <span style='font-size: 1.9rem; font-weight: 700; color: #FFFFFF;'>QuantAI</span>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Navigation (Back button if not on Home) - Moved here
     if st.session_state.current_page != "🏠 Home":
