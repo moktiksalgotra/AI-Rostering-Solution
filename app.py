@@ -1,9 +1,17 @@
+import os
+os.environ["STREAMLIT_SERVER_ENABLE_FILE_WATCHER"] = "false"
+
+import warnings
+# Suppress the specific, non-critical PyTorch warning
+warnings.filterwarnings("ignore", message=".*torch.classes.*", category=UserWarning)
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from utils.optimizer import RosterOptimizer
 from utils.data_handler import DataHandler
+from utils.speech_recognition import initialize_speech_session_state, SpeechToText
 import json
 from datetime import datetime, timedelta
 import calendar
@@ -13,6 +21,7 @@ import io
 from dotenv import load_dotenv
 import base64
 from utils.chatbot import RosteringChatbot
+import re
 
 # Load environment variables
 load_dotenv()
@@ -23,9 +32,37 @@ if not OPENROUTER_API_KEY:
     st.error("OpenRouter API key not found. Please check your .env file.")
     st.stop()
 
+# Define utility functions
+def strip_html_tags(text):
+    return re.sub(r'<[^>]+>', '', text)
+
+def format_date(date_str):
+    """Format date string to a professional format with weekday."""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_obj.strftime('%A, %B %d, %Y')  # e.g., "Monday, March 25, 2024"
+    except:
+        return date_str
+
+def get_short_date(date_str):
+    """Format date string to a shorter format with weekday."""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_obj.strftime('%a, %b %d')  # e.g., "Mon, Mar 25"
+    except:
+        return date_str
+
+def _format_staff_list(staff_list):
+    """Format staff list for display in calendar view."""
+    if not staff_list:
+        return '<span class="no-staff">No staff assigned</span>'
+    return '<br>'.join(f"• {staff}" for staff in staff_list)
+
 # Initialize session state variables
 if 'data_handler' not in st.session_state:
     st.session_state.data_handler = DataHandler()
+    # Clear roster data on app initialization
+    st.session_state.data_handler.db.clear_roster()
 
 if 'optimizer' not in st.session_state:
     st.session_state.optimizer = RosterOptimizer()
@@ -52,27 +89,21 @@ if 'chatbot' not in st.session_state:
         st.error(f"Failed to initialize chatbot: {str(e)}")
         st.stop()
 
-def format_date(date_str):
-    """Format date string to a professional format with weekday."""
-    try:
-        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        return date_obj.strftime('%A, %B %d, %Y')  # e.g., "Monday, March 25, 2024"
-    except:
-        return date_str
+if 'trigger_rerun_for_roster' not in st.session_state:
+    st.session_state.trigger_rerun_for_roster = False
 
-def get_short_date(date_str):
-    """Format date string to a shorter format with weekday."""
-    try:
-        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        return date_obj.strftime('%a, %b %d')  # e.g., "Mon, Mar 25"
-    except:
-        return date_str
+# Initialize speech recognition session state
+initialize_speech_session_state()
 
-def _format_staff_list(staff_list):
-    """Format staff list for display in calendar view."""
-    if not staff_list:
-        return '<span class="no-staff">No staff assigned</span>'
-    return '<br>'.join(f"• {staff}" for staff in staff_list)
+# Function to sanitize chat history
+def sanitize_chat_history():
+    if 'chat_history' in st.session_state:
+        for message in st.session_state.chat_history:
+            if 'content' in message:
+                message['content'] = strip_html_tags(message['content'])
+
+# Run sanitization on app startup
+sanitize_chat_history()
 
 # Set page config with a modern theme
 st.set_page_config(
@@ -903,7 +934,9 @@ elif st.session_state.current_page == "👥 Staff Management": # Staff Managemen
                     st.success(f"✅ Staff member {name} updated successfully!")
                     st.session_state.editing_staff_id = None
                     st.session_state.data_handler.staff_data = st.session_state.data_handler.db.get_all_staff()
-                    st.session_state.chatbot = RosteringChatbot(OPENROUTER_API_KEY, st.session_state.data_handler, st.session_state.optimizer)
+                    # Refresh chatbot's data handler reference
+                    if hasattr(st.session_state, 'chatbot') and st.session_state.chatbot:
+                        st.session_state.chatbot.refresh_data_handler()
                     st.rerun()
                 else:
                     st.error(f"❌ Error updating staff member {name}.")
@@ -911,7 +944,9 @@ elif st.session_state.current_page == "👥 Staff Management": # Staff Managemen
                 if st.session_state.data_handler.add_staff_member(name, role, skills_str):
                     st.success(f"✅ Staff member {name} added successfully!")
                     st.session_state.data_handler.staff_data = st.session_state.data_handler.db.get_all_staff()
-                    st.session_state.chatbot = RosteringChatbot(OPENROUTER_API_KEY, st.session_state.data_handler, st.session_state.optimizer)
+                    # Refresh chatbot's data handler reference
+                    if hasattr(st.session_state, 'chatbot') and st.session_state.chatbot:
+                        st.session_state.chatbot.refresh_data_handler()
                     st.rerun()
                 else:
                     st.error(f"❌ Error adding staff member {name}.")
@@ -987,9 +1022,8 @@ elif st.session_state.current_page == "📋 Leave Management":
         </div>
     </div>
     """, unsafe_allow_html=True)
-    # Initialize leave_requests in session state if not present
-    if 'leave_requests' not in st.session_state:
-        st.session_state.leave_requests = st.session_state.data_handler.db.get_all_leave_requests()
+    # Always fetch the latest leave requests from the database for UI consistency
+    st.session_state.leave_requests = st.session_state.data_handler.db.get_all_leave_requests()
 
     # Add custom CSS for red and white theme without hover effects
     st.markdown("""
@@ -1036,17 +1070,6 @@ elif st.session_state.current_page == "📋 Leave Management":
     }
     
     .leave-status-approved {
-        background-color: #1e40af;
-        color: #FFFFFF;
-    }
-    
-    .leave-status-pending {
-        background-color: #F0F0F0;
-        color: #666666;
-        border: 1px solid #D0D0D0;
-    }
-    
-    .leave-status-rejected {
         background-color: #1e40af;
         color: #FFFFFF;
     }
@@ -1100,7 +1123,7 @@ elif st.session_state.current_page == "📋 Leave Management":
     leave_types = ["Annual Leave", "Sick Leave", "Personal Leave"]
 
     
-    st.markdown("<div class='leave-header'>📝 Submit Leave Request</div>", unsafe_allow_html=True)
+    st.markdown("<div class='leave-header'>📝 Submit Leave Request (Auto-Approved)</div>", unsafe_allow_html=True)
     
     with st.form(key="leave_request_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
@@ -1121,7 +1144,7 @@ elif st.session_state.current_page == "📋 Leave Management":
                 staff_member, leave_type, str(start_date), str(end_date), duration, reason
             )
             if success:
-                st.success("Leave request submitted!")
+                st.success("Leave request submitted and approved!")
                 st.session_state.leave_requests = st.session_state.data_handler.db.get_all_leave_requests()
                 # Clear the trigger after processing
                 if 'trigger_leave_submit' in st.session_state:
@@ -1184,6 +1207,36 @@ elif st.session_state.current_page == "📋 Leave Management":
                 st.rerun()
     else:
         st.info("No leave requests found.")
+    
+    # Add manual reset button for leave requests
+    st.markdown("<div class='leave-header' style='margin-top: 30px;'>🗑️ Database Management</div>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🗑️ Reset All Leave Requests", key="reset_leave_requests", help="Clear all leave requests from the database"):
+            try:
+                if hasattr(st.session_state.data_handler, 'db') and hasattr(st.session_state.data_handler.db, 'reset_leave_requests'):
+                    success = st.session_state.data_handler.db.reset_leave_requests()
+                    if success:
+                        st.session_state.leave_requests = st.session_state.data_handler.db.get_all_leave_requests()
+                        st.success("✅ All leave requests have been reset successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to reset leave requests.")
+                else:
+                    st.error("❌ Reset functionality not available.")
+            except Exception as e:
+                st.error(f"❌ Error resetting leave requests: {str(e)}")
+    
+    st.markdown("""
+    <div style='background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 15px; margin-top: 15px;'>
+        <div style='color: #e2e8f0; font-size: 0.9rem; font-style: italic;'>
+            💡 <strong>Note:</strong> This will permanently delete all leave requests from the database. 
+            This action cannot be undone. Use this feature carefully, typically at the end of a planning period.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.current_page == "📅 Roster Generation": # Roster Generation Tab
@@ -1370,6 +1423,9 @@ elif st.session_state.current_page == "📅 Roster Generation": # Roster Generat
                     display_df['Day_Name'] = pd.to_datetime(display_df['Date']).dt.strftime('%A')
                     display_df['Formatted_Date'] = display_df['Date'].apply(format_date)
                     
+                    # Calculate staff count
+                    display_df['Staff_Count'] = display_df['Staff'].apply(lambda x: len(x.split(',')) if x != 'No staff assigned' else 0)
+                    
                     # Reorder columns for better presentation
                     display_df = display_df[[
                         'Day', 'Day_Name', 'Formatted_Date', 'Shift_Time', 
@@ -1429,9 +1485,9 @@ elif st.session_state.current_page == "📅 Roster Generation": # Roster Generat
 
                     # Add roster statistics
                     total_shifts = len(display_df)
-                    total_staff_assigned = display_df['Staff Count'].sum()
-                    unique_staff = len(set([staff for staffs in display_df['Assigned Staff'].str.split(',') for staff in staffs]))
-                    avg_staff_per_shift = display_df['Staff Count'].mean()
+                    total_staff_assigned = sum(len(staff.split(',')) for staff in display_df['Assigned Staff'] if staff != 'No staff assigned')
+                    unique_staff = len(set([staff.strip() for staffs in display_df['Assigned Staff'].str.split(',') for staff in staffs if staff.strip() != 'No staff assigned']))
+                    avg_staff_per_shift = total_staff_assigned / total_shifts if total_shifts > 0 else 0
 
                     st.markdown("""
                     <div class="roster-stats">
@@ -2116,24 +2172,12 @@ elif st.session_state.current_page == "💬 AI Assistant":
                     </div>""", unsafe_allow_html=True)
     else:
         for message in st.session_state.chat_history:
-            sender = message["role"]
-            is_user = sender == "user"
-            avatar = "🧑" if is_user else "🤖"
-            avatar_class = "user" if is_user else "assistant"
-            row_class = "user" if is_user else "assistant"
-            st.markdown(f"""
-            <div class='chat-row {row_class}'>
-                <div class='chat-avatar-real {avatar_class}'>{avatar}</div>
-                <div style='display: flex; flex-direction: column; align-items: {'flex-end' if is_user else 'flex-start'};'>
-                    <div class='bubble'>
-                        {message["content"]}
-                        <span class='bubble-tail'></span>
-                    </div>
-                    <div class='chat-timestamp'>{message.get("time", "")}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
+            role = message["role"]
+            with st.chat_message(name=role, avatar=("🧑" if role == "user" else "🤖")):
+                st.markdown(message["content"], unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     # Input area - structure using st.columns for better control within the flex container
     st.markdown("""
     <style>
@@ -2173,19 +2217,95 @@ elif st.session_state.current_page == "💬 AI Assistant":
         background: #f0f4ff !important;
         color: #1e40af !important;
     }
+    
+    /* Simplified speech input styling */
+    .speech-button {
+        background: #1e40af !important;
+        color: #fff !important;
+        border: none !important;
+        border-radius: 8px !important;
+        width: 50px !important;
+        height: 50px !important;
+        font-size: 1.5em !important;
+        transition: all 0.2s ease !important;
+        margin-top: 9px !important;
+    }
+    .speech-button:hover {
+        background: #1a368b !important;
+        transform: scale(1.05) !important;
+        box-shadow: 0 4px 8px rgba(30,64,175,0.3) !important;
+    }
+    .speech-button:active {
+        transform: scale(0.95) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
     # Chat input area
     st.markdown("<div class='ai-chat-input-area'>", unsafe_allow_html=True)
+    
+    # Add speech-to-text functionality
+    from utils.speech_recognition import SpeechToText
+    
+    # Create speech recognition instance
+    if 'speech_to_text' not in st.session_state:
+        st.session_state.speech_to_text = SpeechToText(st.session_state.data_handler)
+    
     with st.form(key="ai_chat_form_enhanced", clear_on_submit=True):
-        user_input = st.text_area(
-            "Message",
-            placeholder="Type your message...",
-            label_visibility="collapsed",
-            key="ai_user_input_enhanced_key",
-            height=68 # Changed from 44 to 68 to meet minimum requirement
-        )
+        # Simple input row with microphone and text input
+        input_col1, input_col2 = st.columns([1, 8])
+        
+        with input_col1:
+            # Microphone button
+            if st.form_submit_button("🎤", help="Click to start voice input"):
+                st.session_state.speech_active = True
+        
+        with input_col2:
+            # Handle speech recognition if active
+            if st.session_state.get('speech_active', False):
+                success, text = st.session_state.speech_to_text.listen_and_convert()
+                
+                if success:
+                    st.session_state.transcribed_text = text
+                    st.session_state.speech_active = False
+                    st.rerun()
+                else:
+                    st.error(text)
+                    st.session_state.speech_active = False
+                    st.rerun()
+            
+            # Show staff name suggestions
+            staff_names = []
+            try:
+                if st.session_state.data_handler and hasattr(st.session_state.data_handler, 'db'):
+                    staff_df = st.session_state.data_handler.db.get_all_staff()
+                    if not staff_df.empty:
+                        staff_names = staff_df['name'].tolist()
+            except:
+                pass
+            
+            if staff_names:
+                st.caption(f"💡 Available staff: {', '.join(staff_names[:5])}{'...' if len(staff_names) > 5 else ''}")
+            
+            # Text input - use transcribed text if available
+            if st.session_state.get('transcribed_text'):
+                user_input = st.text_area(
+                    "Message",
+                    value=st.session_state.transcribed_text,
+                    placeholder="Type your message or use voice input...",
+                    label_visibility="collapsed",
+                    key="ai_user_input_enhanced_key",
+                    height=68
+                )
+            else:
+                user_input = st.text_area(
+                    "Message",
+                    placeholder="Type your message or use voice input...",
+                    label_visibility="collapsed",
+                    key="ai_user_input_enhanced_key",
+                    height=68
+                )
+        
         # Button row
         st.markdown("<div class='ai-chat-input-row'>", unsafe_allow_html=True)
         send_col, clear_col = st.columns([1,1])
@@ -2198,7 +2318,7 @@ elif st.session_state.current_page == "💬 AI Assistant":
             )
         with clear_col:
             clear_button = st.form_submit_button(
-                label="🗑️",
+                label="🗑️ Clear Chat",
                 help="Clear chat history",
                 use_container_width=True,
                 type="secondary"
@@ -2208,7 +2328,18 @@ elif st.session_state.current_page == "💬 AI Assistant":
 
     # Handle form submission for text input (must be outside the columns where form is defined)
     if send_button and user_input.strip():
-        st.session_state.chat_history.append({"role": "user", "content": user_input.strip(), "time": datetime.now().strftime("%H:%M:%S")})
+        # Before processing chat input, always reset trigger_rerun_for_roster
+        if st.session_state.get('trigger_rerun_for_roster', False):
+            st.session_state.trigger_rerun_for_roster = False
+
+        # Sanitize user input before adding to chat history
+        sanitized_input = strip_html_tags(user_input.strip())
+        st.session_state.chat_history.append({"role": "user", "content": sanitized_input, "time": datetime.now().strftime("%H:%M:%S")})
+        
+        # Clear transcribed text after sending
+        if st.session_state.get('transcribed_text'):
+            st.session_state.transcribed_text = ""
+        
         try:
             # Custom thinking animation
             thinking_container = st.empty()
@@ -2218,18 +2349,34 @@ elif st.session_state.current_page == "💬 AI Assistant":
                 </div>
             """, unsafe_allow_html=True)
             
-            response = st.session_state.chatbot.chat(user_input.strip())
+            response = st.session_state.chatbot.chat(sanitized_input)
             thinking_container.empty()  # Clear the thinking animation
+            
+            # Additional HTML sanitization to ensure no tags appear in UI
+            response = strip_html_tags(response)
+            
             st.session_state.chat_history.append({"role": "assistant", "content": response, "time": datetime.now().strftime("%H:%M:%S")})
-            if st.session_state.get('trigger_rerun_for_roster', False):
+            
+            # Check if we need to rerun for roster generation
+            if st.session_state.trigger_rerun_for_roster:
                 st.session_state.trigger_rerun_for_roster = False
-                st.success("Roster updated. Check 'Roster Generation'.")
+                st.session_state.current_page = "📅 Roster Generation"
+                st.rerun()
+            
+            # Rerun to update the chat history
+            st.rerun()
+            
         except Exception as e:
             thinking_container.empty()  # Clear the thinking animation
-            st.session_state.chat_history.append({"role": "assistant", "content": f"Error: {str(e)}", "time": datetime.now().strftime("%H:%M:%S")})
-        st.rerun()
+            error_msg = f"I apologize, but I encountered an error while processing your request: {str(e)}. Please try again."
+            # Sanitize error message
+            error_msg = strip_html_tags(error_msg)
+            st.session_state.chat_history.append({"role": "assistant", "content": error_msg, "time": datetime.now().strftime("%H:%M:%S")})
+            st.rerun()
+
     elif clear_button:
         st.session_state.chat_history = []
+        st.session_state.transcribed_text = ""
         st.rerun()
     elif send_button and not user_input.strip():
         st.warning("Please enter a message.")

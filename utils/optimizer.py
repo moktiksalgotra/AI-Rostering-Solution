@@ -45,28 +45,6 @@ class RosterOptimizer:
             self.debug_info = []
             self.last_error = None
 
-            # Process leave requests
-            staff_leaves = {}
-            if leave_requests:
-                for request in leave_requests:
-                    if request['status'] == 'Approved':
-                        staff_name = request['staff_member']
-                        start_date = datetime.strptime(request['start_date'], '%Y-%m-%d')
-                        end_date = datetime.strptime(request['end_date'], '%Y-%m-%d')
-                        
-                        # Get staff index
-                        staff_idx = staff_data[staff_data['name'] == staff_name].index[0]
-                        
-                        # Mark all days in the leave period
-                        current_date = start_date
-                        while current_date <= end_date:
-                            day_num = (current_date - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).days
-                            if 0 <= day_num < num_days:
-                                if staff_idx not in staff_leaves:
-                                    staff_leaves[staff_idx] = set()
-                                staff_leaves[staff_idx].add(day_num)
-                            current_date += timedelta(days=1)
-
             # Input validation with detailed messages
             if staff_data is None or staff_data.empty:
                 self.last_error = "No staff data provided"
@@ -129,7 +107,17 @@ class RosterOptimizer:
             for staff in range(num_staff):
                 for day in range(num_days):
                     # Check if staff is on leave
-                    is_on_leave = staff in staff_leaves and day in staff_leaves[staff]
+                    is_on_leave = False
+                    if leave_requests:
+                        staff_name = staff_data.iloc[staff]['name']
+                        for request in leave_requests:
+                            if request['staff_member'] == staff_name:
+                                start_date = datetime.strptime(request['start_date'], '%Y-%m-%d')
+                                end_date = datetime.strptime(request['end_date'], '%Y-%m-%d')
+                                current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=day)
+                                if start_date <= current_date <= end_date:
+                                    is_on_leave = True
+                                    break
                     
                     for shift in range(shifts_per_day):
                         shifts[(staff, day, shift)] = self.model.NewBoolVar(
@@ -233,23 +221,18 @@ class RosterOptimizer:
                     for shift in range(shifts_per_day):
                         staff_on_shift = []
                         for staff in range(num_staff):
-                            # Skip staff on leave
-                            if staff in staff_leaves and day in staff_leaves[staff]:
-                                continue
-                            
                             if self.solver.Value(shifts[(staff, day, shift)]) == 1:
                                 staff_on_shift.append(staff_data.iloc[staff]['name'])
                                 total_assignments += 1
 
-                        if staff_on_shift:
-                            roster_data.append({
-                                'Day': day + 1,
-                                'Date': date,
-                                'Shift': shift + 1,
-                                'Shift_Time': self._get_shift_time(shift),
-                                'Staff': ', '.join(staff_on_shift),
-                                'Staff_Count': len(staff_on_shift)
-                            })
+                        roster_data.append({
+                            'Day': day + 1,
+                            'Date': date,
+                            'Shift': shift + 1,
+                            'Shift_Time': self._get_shift_time(shift),
+                            'Staff': ', '.join(staff_on_shift) if staff_on_shift else 'No staff assigned',
+                            'Staff_Count': len(staff_on_shift)
+                        })
 
                 self._log_debug(f"Total assignments made: {total_assignments}")
                 
