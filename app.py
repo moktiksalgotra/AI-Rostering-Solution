@@ -11,7 +11,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from utils.optimizer import RosterOptimizer
 from utils.data_handler import DataHandler
-from utils.speech_recognition import initialize_speech_session_state, SpeechToText
 import json
 from datetime import datetime, timedelta
 import calendar
@@ -91,9 +90,6 @@ if 'chatbot' not in st.session_state:
 
 if 'trigger_rerun_for_roster' not in st.session_state:
     st.session_state.trigger_rerun_for_roster = False
-
-# Initialize speech recognition session state
-initialize_speech_session_state()
 
 # Function to sanitize chat history
 def sanitize_chat_history():
@@ -2217,95 +2213,19 @@ elif st.session_state.current_page == "💬 AI Assistant":
         background: #f0f4ff !important;
         color: #1e40af !important;
     }
-    
-    /* Simplified speech input styling */
-    .speech-button {
-        background: #1e40af !important;
-        color: #fff !important;
-        border: none !important;
-        border-radius: 8px !important;
-        width: 50px !important;
-        height: 50px !important;
-        font-size: 1.5em !important;
-        transition: all 0.2s ease !important;
-        margin-top: 9px !important;
-    }
-    .speech-button:hover {
-        background: #1a368b !important;
-        transform: scale(1.05) !important;
-        box-shadow: 0 4px 8px rgba(30,64,175,0.3) !important;
-    }
-    .speech-button:active {
-        transform: scale(0.95) !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
     # Chat input area
     st.markdown("<div class='ai-chat-input-area'>", unsafe_allow_html=True)
-    
-    # Add speech-to-text functionality
-    from utils.speech_recognition import SpeechToText
-    
-    # Create speech recognition instance
-    if 'speech_to_text' not in st.session_state:
-        st.session_state.speech_to_text = SpeechToText(st.session_state.data_handler)
-    
     with st.form(key="ai_chat_form_enhanced", clear_on_submit=True):
-        # Simple input row with microphone and text input
-        input_col1, input_col2 = st.columns([1, 8])
-        
-        with input_col1:
-            # Microphone button
-            if st.form_submit_button("🎤", help="Click to start voice input"):
-                st.session_state.speech_active = True
-        
-        with input_col2:
-            # Handle speech recognition if active
-            if st.session_state.get('speech_active', False):
-                success, text = st.session_state.speech_to_text.listen_and_convert()
-                
-                if success:
-                    st.session_state.transcribed_text = text
-                    st.session_state.speech_active = False
-                    st.rerun()
-                else:
-                    st.error(text)
-                    st.session_state.speech_active = False
-                    st.rerun()
-            
-            # Show staff name suggestions
-            staff_names = []
-            try:
-                if st.session_state.data_handler and hasattr(st.session_state.data_handler, 'db'):
-                    staff_df = st.session_state.data_handler.db.get_all_staff()
-                    if not staff_df.empty:
-                        staff_names = staff_df['name'].tolist()
-            except:
-                pass
-            
-            if staff_names:
-                st.caption(f"💡 Available staff: {', '.join(staff_names[:5])}{'...' if len(staff_names) > 5 else ''}")
-            
-            # Text input - use transcribed text if available
-            if st.session_state.get('transcribed_text'):
-                user_input = st.text_area(
-                    "Message",
-                    value=st.session_state.transcribed_text,
-                    placeholder="Type your message or use voice input...",
-                    label_visibility="collapsed",
-                    key="ai_user_input_enhanced_key",
-                    height=68
-                )
-            else:
-                user_input = st.text_area(
-                    "Message",
-                    placeholder="Type your message or use voice input...",
-                    label_visibility="collapsed",
-                    key="ai_user_input_enhanced_key",
-                    height=68
-                )
-        
+        user_input = st.text_area(
+            "Message",
+            placeholder="Type your message...",
+            label_visibility="collapsed",
+            key="ai_user_input_enhanced_key",
+            height=68 # Changed from 44 to 68 to meet minimum requirement
+        )
         # Button row
         st.markdown("<div class='ai-chat-input-row'>", unsafe_allow_html=True)
         send_col, clear_col = st.columns([1,1])
@@ -2318,7 +2238,7 @@ elif st.session_state.current_page == "💬 AI Assistant":
             )
         with clear_col:
             clear_button = st.form_submit_button(
-                label="🗑️ Clear Chat",
+                label="🗑️",
                 help="Clear chat history",
                 use_container_width=True,
                 type="secondary"
@@ -2335,11 +2255,6 @@ elif st.session_state.current_page == "💬 AI Assistant":
         # Sanitize user input before adding to chat history
         sanitized_input = strip_html_tags(user_input.strip())
         st.session_state.chat_history.append({"role": "user", "content": sanitized_input, "time": datetime.now().strftime("%H:%M:%S")})
-        
-        # Clear transcribed text after sending
-        if st.session_state.get('transcribed_text'):
-            st.session_state.transcribed_text = ""
-        
         try:
             # Custom thinking animation
             thinking_container = st.empty()
@@ -2376,7 +2291,6 @@ elif st.session_state.current_page == "💬 AI Assistant":
 
     elif clear_button:
         st.session_state.chat_history = []
-        st.session_state.transcribed_text = ""
         st.rerun()
     elif send_button and not user_input.strip():
         st.warning("Please enter a message.")
