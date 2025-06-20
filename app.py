@@ -3123,3 +3123,26 @@ div[data-testid="stDownloadButton"] button:hover {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# --- Monkey-patch Streamlit to fix 'keyboard_double_arrow_right' icon issue ---
+import streamlit as st
+_original_header = st.header
+_original_subheader = st.subheader
+_original_markdown = st.markdown
+
+def _fix_icon_text(text, *args, **kwargs):
+    if isinstance(text, str) and 'keyboard_double_arrow_right' in text:
+        text = text.replace('keyboard_double_arrow_right', '⏩')
+    return text
+
+def header_patch(text, *args, **kwargs):
+    return _original_header(_fix_icon_text(text), *args, **kwargs)
+def subheader_patch(text, *args, **kwargs):
+    return _original_subheader(_fix_icon_text(text), *args, **kwargs)
+def markdown_patch(text, *args, **kwargs):
+    return _original_markdown(_fix_icon_text(text), *args, **kwargs)
+
+st.header = header_patch
+st.subheader = subheader_patch
+st.markdown = markdown_patch
+# --- End monkey-patch ---
